@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (Auth UID)
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - email: string (required, email format)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional, url format)
+    //   - role: string (required, ['user', 'admin'])
+    //   - createdAt: string (required, ISO 8601)
+    //
+    // Collection: audits
+    // Document ID: {auditId}
+    // Fields:
+    //   - userId: string (required, matches auth.uid)
+    //   - type: string (required, ['pii', 'risk'])
+    //   - inputSnippet: string (optional, max 100 chars)
+    //   - riskScore: number (required, 0-100)
+    //   - summary: string (optional)
+    //   - findings: list (optional)
+    //   - createdAt: string (required, ISO 8601)
+    //
+    // Collection: policies
+    // Document ID: {policyId}
+    // Fields:
+    //   - userId: string (required, matches auth.uid)
+    //   - policyName: string (optional)
+    //   - complianceScore: number (required, 0-100)
+    //   - gdprCompliant: bool (required)
+    //   - ccpaCompliant: bool (required)
+    //   - findings: list (optional)
+    //   - summary: string (optional)
+    //   - createdAt: string (required, ISO 8601)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "sayyad.alizabano@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.role in ['user', 'admin'] &&
+             isValidDateString(data.createdAt) &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL));
+    }
+
+    function isValidAudit(data) {
+      return data.keys().hasAll(['userId', 'type', 'riskScore', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.type in ['pii', 'risk'] &&
+             data.riskScore is number && data.riskScore >= 0 && data.riskScore <= 100 &&
+             isValidDateString(data.createdAt) &&
+             (!('inputSnippet' in data) || (data.inputSnippet is string && data.inputSnippet.size() <= 100));
+    }
+
+    function isValidPolicy(data) {
+      return data.keys().hasAll(['userId', 'complianceScore', 'gdprCompliant', 'ccpaCompliant', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.complianceScore is number && data.complianceScore >= 0 && data.complianceScore <= 100 &&
+             data.gdprCompliant is bool &&
+             data.ccpaCompliant is bool &&
+             isValidDateString(data.createdAt);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.role == 'user' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /audits/{auditId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidAudit(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /policies/{policyId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidPolicy(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

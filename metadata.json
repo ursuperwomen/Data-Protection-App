@@ -1,0 +1,6 @@
+{
+  "name": "GuardianAI",
+  "description": "A privacy-first data protection suite. Features PII detection, risk analysis, and automated redaction using Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

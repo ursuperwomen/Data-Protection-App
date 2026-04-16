@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string", "format": "uri" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "AuditRecord": {
+      "title": "Audit Record",
+      "description": "Record of a PII or Risk analysis",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the user who performed the audit" },
+        "type": { "type": "string", "enum": ["pii", "risk"] },
+        "inputSnippet": { "type": "string", "description": "The first 100 chars of input for reference" },
+        "riskScore": { "type": "integer" },
+        "summary": { "type": "string" },
+        "findings": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "riskScore", "createdAt"]
+    },
+    "PolicyAudit": {
+      "title": "Policy Audit",
+      "description": "Record of a privacy policy compliance check",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "policyName": { "type": "string" },
+        "complianceScore": { "type": "integer" },
+        "gdprCompliant": { "type": "boolean" },
+        "ccpaCompliant": { "type": "boolean" },
+        "findings": { "type": "array" },
+        "summary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "complianceScore", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/audits/{auditId}": {
+      "schema": "AuditRecord",
+      "description": "PII and Risk analysis history"
+    },
+    "/policies/{policyId}": {
+      "schema": "PolicyAudit",
+      "description": "Privacy policy audit history"
+    }
+  }
+}
